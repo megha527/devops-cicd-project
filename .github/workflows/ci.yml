@@ -1,0 +1,36 @@
+name: CI - Docker Build & Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build -t flask-devops-app .
+
+      - name: Run Container
+        run: |
+          docker run -d -p 5000:5000 --name flask-test flask-devops-app
+          sleep 10
+
+      - name: Health Check
+        run: |
+          curl -f http://localhost:5000/health
+
+      - name: Stop Container
+        run: |
+          docker stop flask-test
+          docker rm flask-test
