@@ -1,0 +1,108 @@
+---
+- name: Full EC2 Setup & Flask App Deployment
+  hosts: ec2
+  become: true
+
+  vars:
+    app_dir: /home/ubuntu/flask-app
+
+  tasks:
+    # -----------------------------
+    # 1. Update system packages
+    # -----------------------------
+    - name: Update system packages (RedHat)
+      yum:
+        name: "*"
+        state: latest
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Update system packages (Debian/Ubuntu)
+      apt:
+        update_cache: yes
+        upgrade: dist
+      when: ansible_facts['os_family'] == "Debian"
+
+    # -----------------------------
+    # 2. Install Docker
+    # -----------------------------
+    - name: Install Docker (RedHat)
+      yum:
+        name: docker
+        state: present
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Install Docker (Debian/Ubuntu)
+      apt:
+        name: docker.io
+        state: present
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Start & enable Docker service
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    # -----------------------------
+    # 3. Install Docker Compose
+    # -----------------------------
+    - name: Install Docker Compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.25.0/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: "0755"
+
+    # -----------------------------
+    # 4. Prepare App Directory
+    # -----------------------------
+    - name: Ensure app directory exists
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+
+    # -----------------------------
+    # 5. Clone GitHub Repo (FORCE CLEAN)
+    # -----------------------------
+    - name: Clone GitHub repository
+      git:
+        repo: 'https://github.com/megha527/devops-cicd-project.git'
+        dest: "{{ app_dir }}"
+        version: main
+        force: yes
+
+        # -----------------------------
+    # 6. Ensure .env file exists
+    # -----------------------------
+    - name: Create empty .env file (required by docker-compose)
+      file:
+        path: "{{ app_dir }}/.env"
+        state: touch
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+
+
+    # -----------------------------
+    # 6. Stop old containers (important!)
+    # -----------------------------
+    - name: Stop existing Docker Compose
+      command: docker-compose down
+      args:
+        chdir: "{{ app_dir }}"
+      ignore_errors: yes
+
+    # -----------------------------
+    # 7. Build & Run Flask App
+    # -----------------------------
+    - name: Build and run Docker Compose
+      command: docker-compose up -d --build
+      args:
+        chdir: "{{ app_dir }}"
